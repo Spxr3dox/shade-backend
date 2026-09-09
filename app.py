@@ -35,6 +35,8 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+# Логины-админы: ADMIN_USERS="Spaxer,Other" (через запятую, регистр важен).
+ADMIN_USERS = {u.strip() for u in os.environ.get("ADMIN_USERS", "").split(",") if u.strip()}
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # Файл SQLite кладём рядом с приложением, а не в /tmp: /tmp на некоторых
@@ -123,7 +125,18 @@ def make_key():
 
 
 def is_admin(data):
-    return bool(ADMIN_TOKEN) and data.get("admin_token", "") == ADMIN_TOKEN
+    # Путь 1 — запасной токен (для скриптов).
+    if ADMIN_TOKEN and data.get("admin_token", "") == ADMIN_TOKEN:
+        return True
+    # Путь 2 — аккаунт админа: логин в ADMIN_USERS и верный пароль. Так у
+    # лаунчера нет вшитого секрета — админ входит собой.
+    login = (data.get("login") or "").strip()
+    password = data.get("password") or ""
+    if login and login in ADMIN_USERS:
+        rows = run("SELECT salt, phash FROM users WHERE login=?", (login,))
+        if rows and rows[0][1] == hash_pw(rows[0][0], password):
+            return True
+    return False
 
 
 def human(ts):
@@ -175,6 +188,8 @@ def login():
     if not saved_hwid and hwid:
         run("UPDATE users SET hwid=? WHERE login=?", (hwid, login))
 
+    if login in ADMIN_USERS:
+        role = "admin"
     return jsonify(ok=True, role=role, sub_expires=sub_expires,
                    active=sub_expires > now(), sub_human=human(sub_expires))
 
