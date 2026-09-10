@@ -260,6 +260,17 @@ def list_keys():
     return jsonify(ok=True, keys=keys)
 
 
+@app.post("/api/admin/reset_hwid")
+def reset_hwid():
+    """Сбросить привязку к устройству. Нужно, когда игрок сменил железо."""
+    d = request.get_json(force=True, silent=True) or {}
+    if not is_admin(d):
+        return jsonify(ok=False, error="Нет доступа")
+    target = (d.get("target") or "").strip()
+    run("UPDATE users SET hwid=? WHERE login=?", ("", target))
+    return jsonify(ok=True)
+
+
 @app.post("/api/admin/revoke")
 def revoke():
     d = request.get_json(force=True, silent=True) or {}
